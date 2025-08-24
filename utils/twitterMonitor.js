@@ -14,18 +14,23 @@ export class TwitterMonitor {
     this.processedTweets = new Set();
     
     // Initialize token buyers if auto-buy is enabled
-    if (config.autoBuyEnabled && config.walletMnemonic) {
-      this.solanaBuyer = new SolanaTokenBuyer(
-        config.walletMnemonic, 
-        config.solanaDerivationPath, 
-        config.solanaRpcUrl
-      );
-      this.bscBuyer = new BSCTokenBuyer(
-        config.walletMnemonic, 
-        config.bscDerivationPath, 
-        config.bscRpcUrl
-      );
-      console.log(chalk.green('✅ Auto-buy enabled for both Solana and BSC'));
+    if (config.autoBuyEnabled) {
+      if (config.solanaMnemonic) {
+        this.solanaBuyer = new SolanaTokenBuyer(
+          config.solanaMnemonic, 
+          config.solanaDerivationPath, 
+          config.solanaRpcUrl
+        );
+        console.log(chalk.green('✅ Solana auto-buy enabled'));
+      }
+      if (config.bscMnemonic) {
+        this.bscBuyer = new BSCTokenBuyer(
+          config.bscMnemonic, 
+          config.bscDerivationPath, 
+          config.bscRpcUrl
+        );
+        console.log(chalk.green('✅ BSC auto-buy enabled'));
+      }
     }
   }
 
@@ -180,7 +185,7 @@ export class TwitterMonitor {
     console.log(chalk.cyan('━'.repeat(60)));
     console.log(chalk.white('👤 User: ') + chalk.yellow(`@${result.username}`));
     console.log(chalk.white('🕐 Time: ') + chalk.gray(new Date(result.timestamp).toLocaleString()));
-    console.log(chalk.white('🔗 URL: ') + chalk.blue(result.url));
+    console.log(chalk.white('🔗 Tweet URL: ') + chalk.blue(result.url));
     console.log(chalk.white('📝 Tweet:'));
     console.log(chalk.gray(`   ${result.text}`));
     console.log(chalk.cyan('━'.repeat(60)));
@@ -202,6 +207,13 @@ export class TwitterMonitor {
     if (result.analysis.keywords.length > 0) {
       console.log(chalk.green('🔑 Keywords Detected:'));
       console.log(chalk.yellow(`   ${result.analysis.keywords.join(', ')}`));
+    }
+    
+    if (result.analysis.urls && result.analysis.urls.length > 0) {
+      console.log(chalk.green('🌐 URLs Found in Tweet:'));
+      result.analysis.urls.forEach(url => {
+        console.log(chalk.blue(`   • ${url}`));
+      });
     }
     
     console.log(chalk.cyan('━'.repeat(60)) + '\n');

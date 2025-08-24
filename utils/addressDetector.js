@@ -81,18 +81,34 @@ export class AddressDetector {
   }
 
   /**
+   * Extract URLs from tweet text
+   */
+  extractUrls(text) {
+    // URL regex pattern for http/https URLs and t.co short links
+    const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+    const tcoRegex = /https:\/\/t\.co\/[a-zA-Z0-9]+/g;
+    
+    const httpUrls = text.match(urlRegex) || [];
+    const tcoUrls = text.match(tcoRegex) || [];
+    
+    return [...httpUrls, ...tcoUrls];
+  }
+
+  /**
    * Analyze tweet for crypto addresses and keywords
    */
   analyzeTweet(tweetText) {
     const solanaAddresses = this.extractSolanaAddresses(tweetText);
     const bscAddresses = this.extractBSCAddresses(tweetText);
     const keywords = this.containsCryptoKeywords(tweetText);
+    const urls = this.extractUrls(tweetText);
     
     return {
       hasCryptoContent: solanaAddresses.length > 0 || bscAddresses.length > 0 || keywords.length > 0,
       solanaAddresses,
       bscAddresses,
       keywords,
+      urls,
       timestamp: new Date().toISOString()
     };
   }

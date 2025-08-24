@@ -8,12 +8,14 @@
 - 🟣 Solana 토큰 주소 감지 (Base58 형식)
 - 🟡 BSC/Ethereum 주소 감지 (0x 형식)
 - 🔑 암호화폐 관련 키워드 감지
+- 🌐 **트윗 내 URL 자동 추출 및 표시**
 - 🚀 **자동 토큰 구매 기능**
   - Solana: Pump.fun, Raydium에서 자동 구매
   - BSC: PancakeSwap에서 자동 구매
 - 💰 정수 단위 구매 (예: 3.7 SOL → 3 SOL 사용)
+- 🔐 **분리된 지갑 니모닉** (Solana, BSC 각각 설정)
 - 🔔 Webhook 알림 지원
-- 🍪 쿠키 기반 인증 지원
+- ✅ **API 키 불필요** (Twitter 계정만 필요)
 
 ## 설치
 
@@ -45,8 +47,9 @@ WATCH_KEYWORDS=pump,launch,token,contract,mint
 # 선택사항: 알림용 Webhook URL
 WEBHOOK_URL=https://your-webhook-url
 
-# 지갑 설정 (니모닉 사용)
-WALLET_MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
+# 지갑 설정 (분리된 니모닉)
+SOLANA_MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
+BSC_MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
 
 # 자동 구매 설정
 AUTO_BUY_ENABLED=true
@@ -110,14 +113,16 @@ npm run dev
 ### Phantom (Solana) 지갑에서 니모닉 얻기:
 1. Phantom 앱/확장프로그램 열기
 2. 설정 → 보안 → 시드 구문 표시
-3. 12개 단어를 복사하여 WALLET_MNEMONIC에 입력
+3. 12개 단어를 복사하여 **SOLANA_MNEMONIC**에 입력
 
 ### MetaMask (BSC) 지갑에서 니모닉 얻기:
 1. MetaMask 열기  
 2. 계정 메뉴 → 보안 및 개인정보 → 비밀 복구 구문 표시
-3. 12개 단어를 복사하여 WALLET_MNEMONIC에 입력
+3. 12개 단어를 복사하여 **BSC_MNEMONIC**에 입력
 
-⚠️ **같은 니모닉을 사용하면 Solana와 BSC에서 다른 주소가 생성됩니다**
+✅ **이제 각각의 지갑 니모닉을 따로 설정할 수 있습니다!**
+- SOLANA_MNEMONIC: Phantom 지갑 니모닉
+- BSC_MNEMONIC: MetaMask 지갑 니모닉
 
 ## 보안 주의사항
 

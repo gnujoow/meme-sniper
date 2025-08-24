@@ -32,7 +32,10 @@ export const config = {
   // Auto-buy settings
   autoBuyEnabled: process.env.AUTO_BUY_ENABLED === 'true',
   maxBuyAmountSol: parseFloat(process.env.MAX_BUY_AMOUNT_SOL) || 10,
-  maxBuyAmountBnb: parseFloat(process.env.MAX_BUY_AMOUNT_BNB) || 5
+  maxBuyAmountBnb: parseFloat(process.env.MAX_BUY_AMOUNT_BNB) || 5,
+  
+  // Auto-open URLs
+  autoOpenUrls: process.env.AUTO_OPEN_URLS === 'true'
 };
 
 // Validate required config
