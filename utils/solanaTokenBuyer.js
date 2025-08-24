@@ -14,14 +14,21 @@ import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction
 } from '@solana/spl-token';
-import bs58 from 'bs58';
+import { mnemonicToSeedSync } from 'bip39';
+import { derivePath } from 'ed25519-hd-key';
 import chalk from 'chalk';
 
 export class SolanaTokenBuyer {
-  constructor(privateKey, rpcUrl = 'https://api.mainnet-beta.solana.com') {
+  constructor(mnemonic, derivationPath = "m/44'/501'/0'/0'", rpcUrl = 'https://api.mainnet-beta.solana.com') {
     this.connection = new Connection(rpcUrl, 'confirmed');
-    this.wallet = Keypair.fromSecretKey(bs58.decode(privateKey));
+    
+    // Generate wallet from mnemonic
+    const seed = mnemonicToSeedSync(mnemonic, "");
+    const derivedSeed = derivePath(derivationPath, seed.toString('hex')).key;
+    this.wallet = Keypair.fromSeed(derivedSeed);
     this.publicKey = this.wallet.publicKey;
+    
+    console.log(chalk.gray(`🔑 Solana wallet: ${this.publicKey.toString()}`));
   }
 
   async getBalance() {

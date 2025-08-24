@@ -1,4 +1,4 @@
-import { Scraper } from 'agent-twitter-client';
+import { Scraper } from '@the-convocation/twitter-scraper';
 import chalk from 'chalk';
 import { AddressDetector } from './addressDetector.js';
 import { SolanaTokenBuyer } from './solanaTokenBuyer.js';
@@ -14,15 +14,18 @@ export class TwitterMonitor {
     this.processedTweets = new Set();
     
     // Initialize token buyers if auto-buy is enabled
-    if (config.autoBuyEnabled) {
-      if (config.solanaPrivateKey) {
-        this.solanaBuyer = new SolanaTokenBuyer(config.solanaPrivateKey, config.solanaRpcUrl);
-        console.log(chalk.green('✅ Solana auto-buy enabled'));
-      }
-      if (config.bscPrivateKey) {
-        this.bscBuyer = new BSCTokenBuyer(config.bscPrivateKey, config.bscRpcUrl);
-        console.log(chalk.green('✅ BSC auto-buy enabled'));
-      }
+    if (config.autoBuyEnabled && config.walletMnemonic) {
+      this.solanaBuyer = new SolanaTokenBuyer(
+        config.walletMnemonic, 
+        config.solanaDerivationPath, 
+        config.solanaRpcUrl
+      );
+      this.bscBuyer = new BSCTokenBuyer(
+        config.walletMnemonic, 
+        config.bscDerivationPath, 
+        config.bscRpcUrl
+      );
+      console.log(chalk.green('✅ Auto-buy enabled for both Solana and BSC'));
     }
   }
 
@@ -30,43 +33,64 @@ export class TwitterMonitor {
     try {
       console.log(chalk.blue('🔐 Logging into Twitter...'));
       
-      // Try to login with cookies first if available
-      if (this.config.cookies) {
-        await this.scraper.setCookies(this.config.cookies);
-      } else {
-        // Login with username and password
-        await this.scraper.login(
-          this.config.username,
-          this.config.password
-        );
-        
-        // Save cookies for future use
-        const cookies = await this.scraper.getCookies();
-        console.log(chalk.green('✅ Login successful! Consider saving cookies for future sessions.'));
-        console.log(chalk.gray('Cookies:', JSON.stringify(cookies)));
+      // Login to Twitter using username, password, and email
+      await this.scraper.login(
+        this.config.twitterUsername,
+        this.config.twitterPassword,
+        this.config.twitterEmail
+      );
+      
+      console.log(chalk.green('✅ Successfully logged into Twitter'));
+      
+      // Test by fetching target user info
+      try {
+        const profile = await this.scraper.getProfile(this.config.targetUsername);
+        if (!profile) {
+          throw new Error(`Profile @${this.config.targetUsername} not found`);
+        }
+        console.log(chalk.green(`✅ Found target user: @${this.config.targetUsername} (${profile.name})`));
+        return true;
+      } catch (profileError) {
+        console.error(chalk.red(`❌ Could not find user @${this.config.targetUsername}`));
+        return false;
       }
       
-      return true;
     } catch (error) {
-      console.error(chalk.red('❌ Failed to initialize Twitter client:'), error);
+      console.error(chalk.red('❌ Failed to login to Twitter:'), error.message);
+      console.log(chalk.yellow('ℹ️  Make sure your Twitter credentials are correct'));
+      console.log(chalk.yellow('   Note: Use a burner account as this may trigger rate limits'));
       return false;
     }
   }
 
-  async fetchLatestTweets(username) {
+  async fetchLatestTweets() {
     try {
-      // Get user's latest tweets
-      const tweets = [];
-      const tweetsIterator = this.scraper.getTweets(username, 10);
+      console.log(chalk.gray(`📡 Fetching tweets from @${this.config.targetUsername}...`));
       
-      for await (const tweet of tweetsIterator) {
+      // Get tweets from the target user
+      const tweets = [];
+      const tweetIterator = this.scraper.getTweets(this.config.targetUsername, 10);
+      
+      for await (const tweet of tweetIterator) {
         tweets.push(tweet);
-        if (tweets.length >= 10) break; // Limit to last 10 tweets
+        if (tweets.length >= 10) break; // Limit to 10 tweets
       }
       
+      console.log(chalk.gray(`📊 Retrieved ${tweets.length} tweets`));
       return tweets;
+      
     } catch (error) {
-      console.error(chalk.red('❌ Error fetching tweets:'), error);
+      console.error(chalk.red('❌ Error fetching tweets:'), error.message);
+      
+      // Check if we got rate limited or logged out
+      if (error.message.includes('401') || error.message.includes('403')) {
+        console.log(chalk.yellow('⚠️  Possible authentication issue, attempting re-login...'));
+        const relogin = await this.initialize();
+        if (!relogin) {
+          console.error(chalk.red('❌ Re-login failed'));
+        }
+      }
+      
       return [];
     }
   }
@@ -85,9 +109,9 @@ export class TwitterMonitor {
     if (analysis.hasCryptoContent) {
       const result = {
         id: tweet.id,
-        username: tweet.username,
+        username: tweet.username || this.config.targetUsername,
         text: tweet.text,
-        url: `https://twitter.com/${tweet.username}/status/${tweet.id}`,
+        url: `https://twitter.com/${tweet.username || this.config.targetUsername}/status/${tweet.id}`,
         timestamp: tweet.timeParsed || new Date().toISOString(),
         analysis
       };
@@ -112,10 +136,16 @@ export class TwitterMonitor {
     if (solanaAddresses.length > 0 && this.solanaBuyer) {
       for (const address of solanaAddresses) {
         console.log(chalk.bgMagenta.white('\n 🚀 AUTO-BUYING SOLANA TOKEN '));
+        console.log(chalk.white(`   Address: ${address}`));
         try {
           const buyResult = await this.solanaBuyer.buyToken(address);
           if (buyResult.success) {
             console.log(chalk.green('✅ Solana token purchase successful!'));
+            console.log(chalk.gray(`   Platform: ${buyResult.platform}`));
+            console.log(chalk.gray(`   Amount: ${buyResult.amount} SOL`));
+            console.log(chalk.gray(`   Signature: ${buyResult.signature}`));
+          } else {
+            console.log(chalk.yellow(`⚠️  Solana purchase failed: ${buyResult.error}`));
           }
         } catch (error) {
           console.error(chalk.red('❌ Solana auto-buy error:'), error.message);
@@ -127,10 +157,16 @@ export class TwitterMonitor {
     if (bscAddresses.length > 0 && this.bscBuyer) {
       for (const address of bscAddresses) {
         console.log(chalk.bgYellow.black('\n 🚀 AUTO-BUYING BSC TOKEN '));
+        console.log(chalk.white(`   Address: ${address}`));
         try {
           const buyResult = await this.bscBuyer.buyToken(address);
           if (buyResult.success) {
             console.log(chalk.green('✅ BSC token purchase successful!'));
+            console.log(chalk.gray(`   Platform: ${buyResult.platform}`));
+            console.log(chalk.gray(`   Amount: ${buyResult.amount} BNB`));
+            console.log(chalk.gray(`   Transaction: ${buyResult.hash}`));
+          } else {
+            console.log(chalk.yellow(`⚠️  BSC purchase failed: ${buyResult.error}`));
           }
         } catch (error) {
           console.error(chalk.red('❌ BSC auto-buy error:'), error.message);
@@ -141,11 +177,13 @@ export class TwitterMonitor {
 
   displayAlert(result) {
     console.log('\n' + chalk.bgYellow.black(' 🚨 CRYPTO CONTENT DETECTED! '));
-    console.log(chalk.cyan('━'.repeat(50)));
+    console.log(chalk.cyan('━'.repeat(60)));
     console.log(chalk.white('👤 User: ') + chalk.yellow(`@${result.username}`));
+    console.log(chalk.white('🕐 Time: ') + chalk.gray(new Date(result.timestamp).toLocaleString()));
     console.log(chalk.white('🔗 URL: ') + chalk.blue(result.url));
-    console.log(chalk.white('📝 Tweet: ') + chalk.gray(result.text));
-    console.log(chalk.cyan('━'.repeat(50)));
+    console.log(chalk.white('📝 Tweet:'));
+    console.log(chalk.gray(`   ${result.text}`));
+    console.log(chalk.cyan('━'.repeat(60)));
     
     if (result.analysis.solanaAddresses.length > 0) {
       console.log(chalk.green('🟣 Solana Addresses Found:'));
@@ -166,7 +204,7 @@ export class TwitterMonitor {
       console.log(chalk.yellow(`   ${result.analysis.keywords.join(', ')}`));
     }
     
-    console.log(chalk.cyan('━'.repeat(50)) + '\n');
+    console.log(chalk.cyan('━'.repeat(60)) + '\n');
   }
 
   async startMonitoring() {
@@ -178,6 +216,13 @@ export class TwitterMonitor {
     this.isRunning = true;
     console.log(chalk.green(`✅ Starting monitor for @${this.config.targetUsername}`));
     console.log(chalk.gray(`Check interval: ${this.config.checkInterval / 1000} seconds`));
+    
+    if (this.config.autoBuyEnabled) {
+      console.log(chalk.magenta('🚀 Auto-buy is ENABLED'));
+    } else {
+      console.log(chalk.gray('🔍 Monitoring only (auto-buy disabled)'));
+    }
+    
     console.log(chalk.gray('Press Ctrl+C to stop monitoring\n'));
     
     // Initial check
@@ -193,35 +238,49 @@ export class TwitterMonitor {
 
   async checkForNewTweets() {
     try {
-      const tweets = await this.fetchLatestTweets(this.config.targetUsername);
+      const tweets = await this.fetchLatestTweets();
       
       if (tweets.length === 0) {
-        console.log(chalk.gray(`[${new Date().toLocaleTimeString()}] No tweets found`));
+        console.log(chalk.gray(`[${new Date().toLocaleTimeString()}] No tweets retrieved`));
         return;
       }
       
       let newTweetsFound = false;
+      let cryptoTweetsFound = 0;
       
-      for (const tweet of tweets) {
-        // Process only new tweets
+      // Process tweets in reverse order (oldest first)
+      for (const tweet of tweets.reverse()) {
         if (!this.processedTweets.has(tweet.id)) {
           const result = await this.processTweet(tweet);
           if (result) {
             newTweetsFound = true;
+            cryptoTweetsFound++;
             
             // Send webhook notification if configured
             if (this.config.webhookUrl) {
               await this.sendWebhookNotification(result);
             }
+            
+            // Add a small delay between processing tweets
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       }
       
-      if (!newTweetsFound) {
+      if (newTweetsFound) {
+        console.log(chalk.green(`[${new Date().toLocaleTimeString()}] Found ${cryptoTweetsFound} crypto-related tweet(s)!`));
+      } else {
         console.log(chalk.gray(`[${new Date().toLocaleTimeString()}] No new crypto-related tweets`));
       }
+      
     } catch (error) {
-      console.error(chalk.red(`[${new Date().toLocaleTimeString()}] Error checking tweets:`), error);
+      console.error(chalk.red(`[${new Date().toLocaleTimeString()}] Error checking tweets:`), error.message);
+      
+      // If we get authentication errors, try to re-initialize
+      if (error.message.includes('401') || error.message.includes('forbidden')) {
+        console.log(chalk.yellow('⚠️  Authentication error, attempting to re-login...'));
+        await this.initialize();
+      }
     }
   }
 
@@ -237,9 +296,11 @@ export class TwitterMonitor {
       
       if (!response.ok) {
         console.error(chalk.red('❌ Failed to send webhook notification'));
+      } else {
+        console.log(chalk.green('📡 Webhook notification sent'));
       }
     } catch (error) {
-      console.error(chalk.red('❌ Webhook error:'), error);
+      console.error(chalk.red('❌ Webhook error:'), error.message);
     }
   }
 

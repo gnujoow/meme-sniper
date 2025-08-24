@@ -8,7 +8,7 @@ import {
   decodeFunctionResult
 } from 'viem';
 import { bsc } from 'viem/chains';
-import { privateKeyToAccount } from 'viem/accounts';
+import { mnemonicToAccount } from 'viem/accounts';
 import chalk from 'chalk';
 
 // PancakeSwap Router V2 ABI (minimal)
@@ -71,8 +71,11 @@ const ERC20_ABI = [
 ];
 
 export class BSCTokenBuyer {
-  constructor(privateKey, rpcUrl = 'https://bsc-dataseed.binance.org/') {
-    this.account = privateKeyToAccount(`0x${privateKey.replace('0x', '')}`);
+  constructor(mnemonic, derivationPath = "m/44'/60'/0'/0/0", rpcUrl = 'https://bsc-dataseed.binance.org/') {
+    // Generate account from mnemonic
+    this.account = mnemonicToAccount(mnemonic, {
+      path: derivationPath
+    });
     
     this.publicClient = createPublicClient({
       chain: bsc,
@@ -89,6 +92,8 @@ export class BSCTokenBuyer {
     this.PANCAKE_ROUTER = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
     // WBNB address
     this.WBNB = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+    
+    console.log(chalk.gray(`🔑 BSC wallet: ${this.account.address}`));
   }
 
   async getBalance() {

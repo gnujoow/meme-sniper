@@ -3,10 +3,10 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const config = {
-  // Twitter credentials
-  username: process.env.TWITTER_USERNAME,
-  password: process.env.TWITTER_PASSWORD,
-  cookies: process.env.TWITTER_COOKIES ? JSON.parse(process.env.TWITTER_COOKIES) : null,
+  // Twitter authentication (no API key needed)
+  twitterUsername: process.env.TWITTER_USERNAME,
+  twitterPassword: process.env.TWITTER_PASSWORD,
+  twitterEmail: process.env.TWITTER_EMAIL,
   
   // Monitoring settings
   targetUsername: process.env.TARGET_USERNAME || 'elonmusk',
@@ -19,9 +19,11 @@ export const config = {
   // Webhook for notifications
   webhookUrl: process.env.WEBHOOK_URL || null,
   
-  // Wallet configuration
-  solanaPrivateKey: process.env.SOLANA_PRIVATE_KEY,
-  bscPrivateKey: process.env.BSC_PRIVATE_KEY,
+  // Wallet configuration (separate mnemonics)
+  solanaMnemonic: process.env.SOLANA_MNEMONIC,
+  bscMnemonic: process.env.BSC_MNEMONIC,
+  solanaDerivationPath: process.env.SOLANA_DERIVATION_PATH || "m/44'/501'/0'/0'",
+  bscDerivationPath: process.env.BSC_DERIVATION_PATH || "m/44'/60'/0'/0/0",
   
   // RPC URLs
   solanaRpcUrl: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
@@ -37,16 +39,25 @@ export const config = {
 export function validateConfig() {
   const errors = [];
   
-  if (!config.username && !config.cookies) {
-    errors.push('TWITTER_USERNAME is required (or provide TWITTER_COOKIES)');
+  if (!config.twitterUsername) {
+    errors.push('TWITTER_USERNAME is required');
   }
   
-  if (!config.password && !config.cookies) {
-    errors.push('TWITTER_PASSWORD is required (or provide TWITTER_COOKIES)');
+  if (!config.twitterPassword) {
+    errors.push('TWITTER_PASSWORD is required');
   }
   
   if (!config.targetUsername) {
     errors.push('TARGET_USERNAME is required');
+  }
+  
+  if (config.autoBuyEnabled) {
+    if (!config.solanaMnemonic) {
+      errors.push('SOLANA_MNEMONIC is required when auto-buy is enabled');
+    }
+    if (!config.bscMnemonic) {
+      errors.push('BSC_MNEMONIC is required when auto-buy is enabled');
+    }
   }
   
   if (errors.length > 0) {
