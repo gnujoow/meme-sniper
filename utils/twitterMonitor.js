@@ -1,8 +1,10 @@
 import { Scraper } from '@the-convocation/twitter-scraper';
 import chalk from 'chalk';
+import open from 'open';
 import { AddressDetector } from './addressDetector.js';
 import { SolanaTokenBuyer } from './solanaTokenBuyer.js';
 import { BSCTokenBuyer } from './bscTokenBuyer.js';
+import { ProfitTracker } from './profitTracker.js';
 
 export class TwitterMonitor {
   constructor(config) {
@@ -12,6 +14,9 @@ export class TwitterMonitor {
     this.lastTweetId = null;
     this.isRunning = false;
     this.processedTweets = new Set();
+    
+    // Initialize profit tracker
+    this.profitTracker = new ProfitTracker();
     
     // Initialize token buyers if auto-buy is enabled
     if (config.autoBuyEnabled) {
@@ -74,11 +79,11 @@ export class TwitterMonitor {
       
       // Get tweets from the target user
       const tweets = [];
-      const tweetIterator = this.scraper.getTweets(this.config.targetUsername, 10);
+      const tweetIterator = this.scraper.getTweets(this.config.targetUsername, 5);
       
       for await (const tweet of tweetIterator) {
         tweets.push(tweet);
-        if (tweets.length >= 10) break; // Limit to 10 tweets
+        if (tweets.length >= 5) break; // Limit to 5 tweets
       }
       
       console.log(chalk.gray(`📊 Retrieved ${tweets.length} tweets`));
@@ -149,6 +154,17 @@ export class TwitterMonitor {
             console.log(chalk.gray(`   Platform: ${buyResult.platform}`));
             console.log(chalk.gray(`   Amount: ${buyResult.amount} SOL`));
             console.log(chalk.gray(`   Signature: ${buyResult.signature}`));
+            
+            // Add to profit tracker
+            this.profitTracker.addPurchase({
+              chain: 'solana',
+              tokenAddress: address,
+              platform: buyResult.platform,
+              amount: buyResult.amount,
+              signature: buyResult.signature,
+              tokensReceived: buyResult.quote?.outAmount || buyResult.tokenReceived
+            });
+            
           } else {
             console.log(chalk.yellow(`⚠️  Solana purchase failed: ${buyResult.error}`));
           }
@@ -170,6 +186,17 @@ export class TwitterMonitor {
             console.log(chalk.gray(`   Platform: ${buyResult.platform}`));
             console.log(chalk.gray(`   Amount: ${buyResult.amount} BNB`));
             console.log(chalk.gray(`   Transaction: ${buyResult.hash}`));
+            
+            // Add to profit tracker
+            this.profitTracker.addPurchase({
+              chain: 'bsc',
+              tokenAddress: address,
+              platform: buyResult.platform,
+              amount: buyResult.amount,
+              hash: buyResult.hash,
+              tokensReceived: buyResult.tokenReceived
+            });
+            
           } else {
             console.log(chalk.yellow(`⚠️  BSC purchase failed: ${buyResult.error}`));
           }
@@ -214,9 +241,34 @@ export class TwitterMonitor {
       result.analysis.urls.forEach(url => {
         console.log(chalk.blue(`   • ${url}`));
       });
+      
+      // Auto-open URLs in browser if enabled
+      if (this.config.autoOpenUrls) {
+        this.openUrlsInBrowser(result.analysis.urls);
+      }
     }
     
     console.log(chalk.cyan('━'.repeat(60)) + '\n');
+  }
+
+  async openUrlsInBrowser(urls) {
+    console.log(chalk.magenta('🌐 Opening URLs in browser...'));
+    
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      try {
+        console.log(chalk.gray(`   Opening: ${url}`));
+        await open(url);
+        
+        // Add delay between opening multiple URLs to avoid overwhelming the browser
+        if (i < urls.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        console.error(chalk.red(`   ❌ Failed to open URL: ${url}`), error.message);
+      }
+    }
+    console.log(chalk.green(`✅ Opened ${urls.length} URL(s) in browser\n`));
   }
 
   async startMonitoring() {
@@ -235,7 +287,20 @@ export class TwitterMonitor {
       console.log(chalk.gray('🔍 Monitoring only (auto-buy disabled)'));
     }
     
-    console.log(chalk.gray('Press Ctrl+C to stop monitoring\n'));
+    if (this.config.autoOpenUrls) {
+      console.log(chalk.cyan('🌐 Auto-open URLs is ENABLED'));
+    } else {
+      console.log(chalk.gray('🌐 URLs will be displayed only (auto-open disabled)'));
+    }
+    
+    // 판매 기능 안내
+    console.log(chalk.bgYellow.black('💡 SELL CONTROLS:'));
+    console.log(chalk.yellow('   Press "s" + Enter to sell ALL Solana tokens to SOL'));
+    console.log(chalk.yellow('   Press "b" + Enter to sell ALL BSC tokens to BNB'));
+    console.log(chalk.gray('   Press Ctrl+C to stop monitoring\n'));
+    
+    // 키보드 입력 리스너 설정
+    this.setupKeyboardListener();
     
     // Initial check
     await this.checkForNewTweets();
@@ -316,12 +381,89 @@ export class TwitterMonitor {
     }
   }
 
+  setupKeyboardListener() {
+    // stdin을 raw 모드로 설정하여 키 입력을 즉시 받을 수 있도록 함
+    if (process.stdin.setRawMode) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+
+    process.stdin.on('data', async (key) => {
+      // Ctrl+C 처리
+      if (key === '\u0003') {
+        this.stopMonitoring();
+        process.exit();
+      }
+      
+      // 's' 키: Solana 토큰 판매
+      if (key.toLowerCase() === 's') {
+        console.log(chalk.bgRed.white('\n🔥 Solana 토큰 판매 시작...'));
+        if (this.solanaBuyer) {
+          await this.sellAllSolanaTokens();
+        } else {
+          console.log(chalk.red('❌ Solana buyer가 초기화되지 않았습니다.'));
+        }
+      }
+      
+      // 'b' 키: BSC 토큰 판매
+      if (key.toLowerCase() === 'b') {
+        console.log(chalk.bgRed.white('\n🔥 BSC 토큰 판매 시작...'));
+        if (this.bscBuyer) {
+          await this.sellAllBSCTokens();
+        } else {
+          console.log(chalk.red('❌ BSC buyer가 초기화되지 않았습니다.'));
+        }
+      }
+    });
+  }
+
+  async sellAllSolanaTokens() {
+    try {
+      const result = await this.solanaBuyer.sellAllTokensToSOL();
+      if (result.success) {
+        console.log(chalk.green(`\n✅ Solana 판매 완료! 받은 SOL: ${result.totalSOLReceived.toFixed(4)}`));
+        
+        // Profit tracker 업데이트
+        this.profitTracker.purchasedTokens = this.profitTracker.purchasedTokens.filter(
+          token => token.chain !== 'solana'
+        );
+      } else {
+        console.log(chalk.red(`\n❌ Solana 판매 실패: ${result.error}`));
+      }
+    } catch (error) {
+      console.error(chalk.red('\n❌ Solana 판매 오류:'), error.message);
+    }
+  }
+
+  async sellAllBSCTokens() {
+    try {
+      const result = await this.bscBuyer.sellAllTokensToBNB();
+      if (result.success) {
+        console.log(chalk.green(`\n✅ BSC 판매 완료! 받은 BNB: ${result.totalBNBReceived.toFixed(4)}`));
+        
+        // Profit tracker 업데이트
+        this.profitTracker.purchasedTokens = this.profitTracker.purchasedTokens.filter(
+          token => token.chain !== 'bsc'
+        );
+      } else {
+        console.log(chalk.red(`\n❌ BSC 판매 실패: ${result.error}`));
+      }
+    } catch (error) {
+      console.error(chalk.red('\n❌ BSC 판매 오류:'), error.message);
+    }
+  }
+
   stopMonitoring() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
     this.isRunning = false;
+    
+    // Stop profit tracking
+    this.profitTracker.stopTracking();
+    
     console.log(chalk.yellow('\n🛑 Monitoring stopped'));
   }
 }

@@ -8,12 +8,13 @@
 - 🟣 Solana 토큰 주소 감지 (Base58 형식)
 - 🟡 BSC/Ethereum 주소 감지 (0x 형식)
 - 🔑 암호화폐 관련 키워드 감지
-- 🌐 **트윗 내 URL 자동 추출 및 표시**
+- 🌐 **트윗 내 URL 자동 추출 및 브라우저 열기**
 - 🚀 **자동 토큰 구매 기능**
-  - Solana: Pump.fun, Raydium에서 자동 구매
-  - BSC: PancakeSwap에서 자동 구매
+  - Solana: Pump.fun → **공식 Meteora SDK** → Raydium 순서로 자동 구매
+  - BSC: Four.meme → PancakeSwap 순서로 자동 구매
 - 💰 정수 단위 구매 (예: 3.7 SOL → 3 SOL 사용)
 - 🔐 **분리된 지갑 니모닉** (Solana, BSC 각각 설정)
+- 📊 **실시간 수익률 추적** (구매 후 1초마다 업데이트)
 - 🔔 Webhook 알림 지원
 - ✅ **API 키 불필요** (Twitter 계정만 필요)
 
@@ -55,6 +56,9 @@ BSC_MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11
 AUTO_BUY_ENABLED=true
 MAX_BUY_AMOUNT_SOL=10
 MAX_BUY_AMOUNT_BNB=5
+
+# URL 자동 열기 설정
+AUTO_OPEN_URLS=true
 ```
 
 ## 실행
@@ -101,12 +105,28 @@ npm run dev
 /\b0x[a-fA-F0-9]{40}\b/g
 ```
 
-## 자동 구매 기능
+## 자동 기능들
 
+### 🚀 **자동 토큰 구매**
 토큰이 감지되면:
-1. **Solana 토큰**: Pump.fun → Raydium 순서로 확인 후 구매
-2. **BSC 토큰**: PancakeSwap에서 구매
+1. **Solana 토큰**: **Pump.fun → 공식 Meteora SDK → Raydium** 순서로 확인 후 구매
+   - **Pump.fun 우선**: 메메코인 런치패드에서 먼저 확인
+   - **공식 Meteora SDK**: DLMM & Dynamic AMM 풀에서 직접 거래
+     - `@meteora-ag/dlmm`: DLMM 풀 전용 SDK
+     - `@meteora-ag/dynamic-amm-sdk`: Dynamic AMM 풀 전용 SDK
+   - Raydium 폴백: 위 플랫폼에서 찾을 수 없으면 Raydium 사용
+2. **BSC 토큰**: **Four.meme → PancakeSwap** 순서로 확인 후 구매
+   - **Four.meme 우선**: 메메코인 전용 플랫폼에서 먼저 확인
+   - PancakeSwap 폴백: Four.meme에서 찾을 수 없으면 PancakeSwap 사용
 3. **구매 금액**: 지갑 잔액의 정수 부분만 사용 (예: 3.7 SOL → 3 SOL)
+4. **📊 실시간 수익률 추적**: 구매 후 1초마다 수익률 업데이트
+
+### 🌐 **자동 URL 열기**
+트윗에서 URL이 감지되면:
+1. 모든 URL을 콘솔에 표시
+2. `AUTO_OPEN_URLS=true`이면 자동으로 기본 브라우저에서 열기
+3. 여러 URL이 있으면 1초 간격으로 순차적으로 열기
+4. Pump.fun, DEXScreener, CoinGecko 등 토큰 관련 사이트 즉시 확인 가능
 
 ## 니모닉 설정
 
